@@ -1,0 +1,35 @@
+{
+  "name": "boltmem",
+  "version": "0.1.0",
+  "description": "Persistent, searchable memory for Claude Code sessions \u2014 hooks capture, an extraction pass compresses, SQLite+FTS5 stores, a local viewer browses.",
+  "type": "module",
+  "bin": {
+    "boltmem": "./dist/src/cli.js"
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node scripts/copy-assets.mjs",
+    "dev": "tsc -p tsconfig.json --watch",
+    "test": "npm run build && node --test \"dist/test/*.test.js\"",
+    "serve": "node dist/src/cli.js serve",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "memory",
+    "hooks",
+    "sqlite",
+    "fts5"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2"
+  }
+}
