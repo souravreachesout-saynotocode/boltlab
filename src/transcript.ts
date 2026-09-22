@@ -14,6 +14,10 @@ export interface ToolCall {
 
 export interface Transcript {
   path: string;
+  /** Working directory the session ran in, as recorded in the transcript. */
+  cwd: string | null;
+  /** Session id the transcript carries, which need not match the filename. */
+  sessionId: string | null;
   turns: TranscriptTurn[];
   toolCalls: ToolCall[];
   files: string[];
@@ -27,6 +31,8 @@ interface RawEntry {
   type?: string;
   isMeta?: boolean;
   timestamp?: string;
+  cwd?: string;
+  sessionId?: string;
   summary?: string;
   message?: {
     role?: string;
@@ -75,6 +81,8 @@ function textFromContent(content: unknown): string {
 export function parseTranscript(path: string): Transcript {
   const transcript: Transcript = {
     path,
+    cwd: null,
+    sessionId: null,
     turns: [],
     toolCalls: [],
     files: [],
@@ -103,6 +111,8 @@ export function parseTranscript(path: string): Transcript {
       transcript.firstTimestamp ??= entry.timestamp;
       transcript.lastTimestamp = entry.timestamp;
     }
+    if (typeof entry.cwd === 'string' && entry.cwd) transcript.cwd ??= entry.cwd;
+    if (typeof entry.sessionId === 'string' && entry.sessionId) transcript.sessionId ??= entry.sessionId;
 
     if (entry.type === 'summary' && typeof entry.summary === 'string') {
       transcript.turns.push({ role: 'system', text: entry.summary, timestamp: entry.timestamp });

@@ -28,6 +28,9 @@ short version of what to keep in mind while changing it.
   `toMatchExpression`. A stray `(` or `NEAR` in a prompt would otherwise throw.
 - **Injected memory is untrusted.** It is model-written text re-entering a model's
   context. It is labelled as notes to verify, never as instructions.
+- **Backfilled observations are dated from their transcript**, never from `now()`.
+  Recency weighting is half the ranking; dating a backfill today buries everything
+  the user has learned since.
 - **The server is loopback-only.** No auth, and the store holds whatever sessions
   discussed. Do not add a `--host` flag without adding authentication first.
 

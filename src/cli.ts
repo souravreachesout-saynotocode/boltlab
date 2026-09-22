@@ -12,6 +12,7 @@ import {
   stats,
 } from './db/queries.js';
 import { extractFromTranscript } from './extract/index.js';
+import { defaultTranscriptRoot, planBackfill, runBackfill, type BackfillOptions } from './backfill.js';
 import { handleHook, parsePayload, readStdin, type HookEvent } from './hooks/index.js';
 import { cliEntryPath, install, isInstalled, settingsPath, uninstall, type Scope } from './install.js';
 import { startServer } from './server/index.js';
@@ -83,6 +84,9 @@ Usage
   boltmem search <query> [--project p]           Keyword search over the store
   boltmem extract --transcript <path>            Run the extraction pass by hand
                   [--session id] [--project p] [--cwd dir] [--dry-run]
+  boltmem backfill [--days 30] [--limit n]       Extract memory from past sessions
+                   [--project p] [--root dir] [--concurrency 2]
+                   [--min-turns 4] [--force] [--dry-run] [--yes]
   boltmem status                                 Store location, counts, install state
   boltmem forget <project> --yes                 Delete everything for one project
   boltmem hook <event>                           Internal: run a hook (reads stdin)
@@ -126,6 +130,83 @@ async function commandExtract(config: Config, args: Args): Promise<number> {
   } finally {
     db.close();
   }
+  return 0;
+}
+
+/** Sessions a backfill will run before it asks for confirmation. */
+const BACKFILL_AUTO_LIMIT = 25;
+
+function backfillOptionsFrom(args: Args): BackfillOptions {
+  return {
+    root: flagString(args.flags, 'root') ?? defaultTranscriptRoot(),
+    project: flagString(args.flags, 'project') ?? null,
+    days: flagString(args.flags, 'days') ? flagNumber(args.flags, 'days', 0) : null,
+    limit: flagString(args.flags, 'limit') ? flagNumber(args.flags, 'limit', 0) : null,
+    minTurns: flagNumber(args.flags, 'min-turns', 4),
+    force: args.flags.force === true,
+    concurrency: flagNumber(args.flags, 'concurrency', 2),
+  };
+}
+
+function summariseSkips(skipped: { skip?: string }[]): string {
+  const counts = new Map<string, number>();
+  for (const entry of skipped) {
+    const reason = entry.skip ?? 'other';
+    counts.set(reason, (counts.get(reason) ?? 0) + 1);
+  }
+  return [...counts]
+    .map(([reason, count]) => `${count} ${reason.replace(/-/g, ' ')}`)
+    .join(', ');
+}
+
+async function commandBackfill(config: Config, args: Args): Promise<number> {
+  const options = backfillOptionsFrom(args);
+  const plan = planBackfill(config, options);
+
+  console.log(`scanned ${plan.scanned} transcript(s) under ${plan.root}`);
+  if (plan.skipped.length > 0) console.log(`skipping ${summariseSkips(plan.skipped)}`);
+
+  if (plan.planned.length === 0) {
+    console.log('nothing to backfill.');
+    return 0;
+  }
+
+  const byProject = new Map<string, number>();
+  for (const session of plan.planned) {
+    byProject.set(session.project, (byProject.get(session.project) ?? 0) + 1);
+  }
+  console.log(`\n${plan.planned.length} session(s) to extract:`);
+  for (const [project, count] of [...byProject].sort((a, b) => b[1] - a[1])) {
+    console.log(`  ${project.padEnd(28)} ${count}`);
+  }
+
+  if (args.flags['dry-run'] === true) {
+    console.log('\ndry run: nothing was extracted.');
+    return 0;
+  }
+
+  // Each session costs a model call, so a large run is confirmed rather than assumed.
+  if (plan.planned.length > BACKFILL_AUTO_LIMIT && args.flags.yes !== true) {
+    console.log(
+      `\nthat is ${plan.planned.length} model calls. Re-run with --yes to go ahead, ` +
+        `or narrow it with --limit / --days / --project.`,
+    );
+    return 0;
+  }
+
+  console.log('');
+  const result = await runBackfill(config, options, (progress) => {
+    const position = `[${String(progress.index + 1).padStart(String(progress.total).length)}/${progress.total}]`;
+    const detail = progress.error
+      ? `failed: ${progress.error}`
+      : `${progress.inserted} observation(s) via ${progress.via}`;
+    console.log(`${position} ${progress.session.project}/${progress.session.sessionId.slice(0, 8)} — ${detail}`);
+  });
+
+  console.log(
+    `\nbackfilled ${result.inserted} observation(s) from ${result.processed} session(s)` +
+      (result.failed > 0 ? `, ${result.failed} failed (see ${config.home}/boltmem.log)` : ''),
+  );
   return 0;
 }
 
@@ -273,6 +354,9 @@ async function main(): Promise<number> {
 
     case 'extract':
       return commandExtract(config, args);
+
+    case 'backfill':
+      return commandBackfill(config, args);
 
     case 'help':
     case '--help':

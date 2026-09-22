@@ -124,11 +124,27 @@ export function ensureSession(
   return toSession(queryOne<SessionRow>(db, 'SELECT * FROM sessions WHERE id = ?', session.id)!);
 }
 
-export function finishSession(db: Db, sessionId: string, reason: string | null): void {
+export function finishSession(
+  db: Db,
+  sessionId: string,
+  reason: string | null,
+  endedAt?: string,
+): void {
   db.prepare('UPDATE sessions SET ended_at = ?, end_reason = ? WHERE id = ?').run(
-    new Date().toISOString(),
+    endedAt ?? new Date().toISOString(),
     reason,
     sessionId,
+  );
+}
+
+/** How many observations a session already has. Backfill uses it to skip work. */
+export function observationCount(db: Db, sessionId: string): number {
+  return (
+    queryOne<{ count: number }>(
+      db,
+      'SELECT COUNT(*) AS count FROM observations WHERE session_id = ?',
+      sessionId,
+    )?.count ?? 0
   );
 }
 

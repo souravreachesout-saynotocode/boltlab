@@ -27,8 +27,9 @@ start of the next session in that project. A local viewer on
 ```bash
 npm install
 npm run build
-node dist/src/cli.js install     # add the hooks to ~/.claude/settings.json
-node dist/src/cli.js serve       # viewer on http://127.0.0.1:37777
+node dist/src/cli.js install               # add the hooks to ~/.claude/settings.json
+node dist/src/cli.js backfill --days 30    # seed memory from the last month of sessions
+node dist/src/cli.js serve                 # viewer on http://127.0.0.1:37777
 ```
 
 Open a new Claude Code session, work, end it. The next session in that directory
@@ -149,6 +150,7 @@ sessions discussed and nothing authenticates a caller. Static files come from
 ```
 src/
   cli.ts              command line entry point
+  backfill.ts         discovery, planning and batch extraction of past sessions
   config.ts           ~/.boltmem/config.json, env overrides, project naming
   hooks/index.ts      one handler per hook event
   transcript.ts       JSONL → turns, tool calls, files, digest
